@@ -23,6 +23,39 @@
 
 #include <stdlib.h>
 
+
+#include <stdint.h>
+#include <stdio.h>
+#include "math.h"
+
+/* Include memory map of our MCU */
+#include <stm32l475xx.h>
+
+/* Include LED driver */
+#include "leds.h"
+
+#include "timer.h"
+#include "i2c.h"
+#include "lsm6dsl.h"
+#if !defined(__SOFT_FP__) && defined(__ARM_FP)
+  #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
+#endif
+
+// 10011001
+#define PREAMBLE_STUDENT_ID 0b100110010001000010001000
+#define SCALE 0.488
+volatile uint8_t student_id_bit_index = 0;
+volatile uint8_t led_pair = 0;
+
+volatile uint8_t lost_minutes = 0;
+volatile uint8_t update_leds = 0;
+volatile uint32_t still_count = 0; // count number of timer interrupts called to calculate time
+volatile uint32_t lost_count = 0; // count number of 'lost' ticks to calculate lost minutes
+volatile int16_t prev_x = 0, prev_y = 0, prev_z = 0;
+volatile uint8_t still = 0;
+volatile uint32_t sys_tick = 0;
+volatile uint8_t check_lost = 0;
+
 int dataAvailable = 0;
 
 SPI_HandleTypeDef hspi3;
@@ -30,6 +63,75 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
+
+void detectLost() {
+  int16_t x, y, z;
+  lsm6dsl_read_xyz(&x, &y, &z);
+  x = (int16_t) (x * SCALE);
+  y = (int16_t) (y * SCALE);
+  z = (int16_t) (z * SCALE);
+
+  printf("X: %d, Y: %d, Z: %d\n", x, y, z);
+
+  if ((abs(x - prev_x) < 1500) &&
+  (abs(y - prev_y) < 1500) &&
+  (abs(z - prev_z) < 1500)) {
+      still = 1;
+  } else {
+      still = 0;
+      still_count = 0;   // reset still counter moving now
+      lost_count = 0;
+      lost_minutes = 0;
+      student_id_bit_index = 0;
+      leds_set(0);       // turn off LEDs immediately
+  }
+
+  prev_x = x;
+  prev_y = y;
+  prev_z = z;
+}
+
+void handle_lost_mode_leds() {
+  if (still) {
+       // if it is still increment number of ticks it has been still
+      still_count++;
+//        leds_set(0b11);
+      // if no movement for 1 minute enter lost mode
+      if (still_count >= 100) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
+          // handle lost mode logic by flashing leds with minutes since lost
+          uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
+  
+          led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
+          student_id_bit_index += 2;
+          if (student_id_bit_index >= 32) {
+              student_id_bit_index = 0;
+          }
+          leds_set(led_pair);
+          lost_count++; // increment lost count 
+          lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
+      }
+      // then means movement within 1 minute
+      else {
+          leds_set(0); // keep leds off if less than 1 min
+      }
+  }
+}
+
+void TIM2_IRQHandler(void) {
+  if (TIM2->SR & TIM_SR_UIF) {
+      TIM2->SR &= ~TIM_SR_UIF;
+
+      check_lost = 1;
+  }
+}
+
+int _write(int file, char *ptr, int len) {
+  int i = 0;
+  for (i = 0; i < len; i++) {
+      ITM_SendChar(*ptr++);
+  }
+  return len;
+}
 
 /**
   * @brief  The application entry point.
@@ -57,6 +159,25 @@ int main(void)
   HAL_Delay(10);
 
   uint8_t nonDiscoverable = 0;
+
+  // accelerometer and timer inits
+  leds_init();
+  timer_init(TIM2);
+  i2c_init();
+  lsm6dsl_init();
+  timer_set_ms(TIM2, 50);
+  timer_reset(TIM2);
+
+  int16_t x, y, z;
+  lsm6dsl_read_xyz(&x, &y, &z);
+  printf("X: %d, Y: %d, Z: %d", x, y, z);
+  x = (int16_t)(x * SCALE);
+  y = (int16_t)(y * SCALE);
+  z = (int16_t)(z * SCALE);
+
+  prev_x = x;
+  prev_y = y;
+  prev_z = z;
 
   while (1)
   {
