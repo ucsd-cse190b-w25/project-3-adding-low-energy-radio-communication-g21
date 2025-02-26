@@ -55,6 +55,7 @@ volatile int16_t prev_x = 0, prev_y = 0, prev_z = 0;
 volatile uint8_t still = 0;
 volatile uint32_t sys_tick = 0;
 volatile uint8_t check_lost = 0;
+volatile uint32_t lastBleMsgTime = 0;
 
 int dataAvailable = 0;
 
@@ -95,18 +96,34 @@ void handle_lost_mode_leds() {
   if (still) {
        // if it is still increment number of ticks it has been still
       still_count++;
-//        leds_set(0b11);
       // if no movement for 1 minute enter lost mode
-      if (still_count >= 100) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
+      if (still_count >= 1200) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
           // handle lost mode logic by flashing leds with minutes since lost
-          uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
+
+          // instead of handling LEDS, handle BLE message instead
+          // uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
   
-          led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
-          student_id_bit_index += 2;
-          if (student_id_bit_index >= 32) {
-              student_id_bit_index = 0;
+          // led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
+          // student_id_bit_index += 2;
+          // if (student_id_bit_index >= 32) {
+          //     student_id_bit_index = 0;
+          // }
+          // leds_set(led_pair);
+          if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+            catchBLE();
           }
-          leds_set(led_pair);
+
+          // every 10 seconds, send lost message BLE
+          if (HAL_GetTick() - lastBleMsgTime >= 10000) {
+            lastBleMsgTime = HAL_GetTick();
+            
+            uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+            char msg[80];
+            sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
+            
+            updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), (unsigned char*)msg);
+          }
+
           lost_count++; // increment lost count 
           lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
       }
@@ -181,6 +198,15 @@ int main(void)
 
   while (1)
   {
+    detectLost();
+
+    if (check_lost == 1) {  // Each tick is 50ms
+      // before handling lost mode, set lastBleMsgTime to current time
+      lastBleMsgTime = HAL_GetTick();
+      handle_lost_mode_leds();
+      check_lost = 0;
+    }
+
 	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
 	    catchBLE();
 	  }else{
