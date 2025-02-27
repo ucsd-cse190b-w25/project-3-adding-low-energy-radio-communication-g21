@@ -141,25 +141,9 @@ void handle_lost_mode_leds() {
     		  int offset = 0;
 
     		  uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
-    		  char msg[80];
-    		  sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
-
-    		  int msg_len = strlen(msg);
-    		  // Loop until the entire message is sent in chunks
-    		  while (offset < msg_len) {
-    		      // Calculate the number of bytes to send in this chunk
-    		      int chunk_size = (msg_len - offset > BLE_MAX_PAYLOAD) ? BLE_MAX_PAYLOAD : (msg_len - offset);
-
-    		      // Send the chunk using updateCharValue.
-    		      // Note: The 'offset' parameter in updateCharValue might be used by your BLE command to indicate the position.
-    		      updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, offset, chunk_size, (unsigned char*)(msg + offset));
-
-    		      // Increment the offset for the next chunk
-    		      offset += chunk_size;
-
-    		      // Optionally, add a short delay between packets if needed
-    		      HAL_Delay(50);
-    		  }
+    		  char msg[20];
+    		  sprintf(msg, "Missing for %lu secs", lostSeconds);
+    		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
     	  }
 
           lost_count++; // increment lost count 
