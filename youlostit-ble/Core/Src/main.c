@@ -44,6 +44,8 @@
 // 10011001
 #define PREAMBLE_STUDENT_ID 0b100110010001000010001000
 #define SCALE 0.488
+#define TAGNAME "PrivTag"
+#define BLE_MAX_PAYLOAD 20
 volatile uint8_t student_id_bit_index = 0;
 volatile uint8_t led_pair = 0;
 
@@ -56,6 +58,8 @@ volatile uint8_t still = 0;
 volatile uint32_t sys_tick = 0;
 volatile uint8_t check_lost = 0;
 volatile uint32_t lastBleMsgTime = 0;
+volatile uint8_t nonDiscoverable = 0;
+
 
 int dataAvailable = 0;
 
@@ -97,32 +101,66 @@ void handle_lost_mode_leds() {
        // if it is still increment number of ticks it has been still
       still_count++;
       // if no movement for 1 minute enter lost mode
-      if (still_count >= 1200) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
-          // handle lost mode logic by flashing leds with minutes since lost
+      if (still_count >= 50) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
+//           handle lost mode logic by flashing leds with minutes since lost
+//
+//           instead of handling LEDS, handle BLE message instead
+//           uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
+//
+//           led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
+//           student_id_bit_index += 2;
+//           if (student_id_bit_index >= 32) {
+//               student_id_bit_index = 0;
+//           }
+//           leds_set(led_pair);
+//          if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+//            catchBLE();
+//            leds_set(0b11);
+//          }
+//
+//          // every 10 seconds, send lost message BLE
+//          if (HAL_GetTick() - lastBleMsgTime >= 10000) {
+//        	leds_set(0b10);
+//            lastBleMsgTime = HAL_GetTick();
+//
+//            uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+//            char msg[80];
+//            sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
+//
+//            updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), (unsigned char*)msg);
+//          }
+    	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+    		leds_set(0b11);
+    	    catchBLE();
+    	  }
+    	  if (HAL_GetTick() - lastBleMsgTime >= 10000) {
+    		  leds_set(0b10);
+    		  HAL_Delay(1000);
+    		  lastBleMsgTime = HAL_GetTick();
+    		  // Send a string to the NORDIC UART service, remember to not include the newline
+    		  int offset = 0;
 
-          // instead of handling LEDS, handle BLE message instead
-          // uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
-  
-          // led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
-          // student_id_bit_index += 2;
-          // if (student_id_bit_index >= 32) {
-          //     student_id_bit_index = 0;
-          // }
-          // leds_set(led_pair);
-          if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-            catchBLE();
-          }
+    		  uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+    		  char msg[80];
+    		  sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
 
-          // every 10 seconds, send lost message BLE
-          if (HAL_GetTick() - lastBleMsgTime >= 10000) {
-            lastBleMsgTime = HAL_GetTick();
-            
-            uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
-            char msg[80];
-            sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
-            
-            updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), (unsigned char*)msg);
-          }
+    		  int msg_len = strlen(msg);
+    		  // Loop until the entire message is sent in chunks
+    		  while (offset < msg_len) {
+    		      // Calculate the number of bytes to send in this chunk
+    		      int chunk_size = (msg_len - offset > BLE_MAX_PAYLOAD) ? BLE_MAX_PAYLOAD : (msg_len - offset);
+
+    		      // Send the chunk using updateCharValue.
+    		      // Note: The 'offset' parameter in updateCharValue might be used by your BLE command to indicate the position.
+    		      updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, offset, chunk_size, (unsigned char*)(msg + offset));
+
+    		      // Increment the offset for the next chunk
+    		      offset += chunk_size;
+
+    		      // Optionally, add a short delay between packets if needed
+    		      HAL_Delay(50);
+    		  }
+    	  }
 
           lost_count++; // increment lost count 
           lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
@@ -175,8 +213,6 @@ int main(void)
 
   HAL_Delay(10);
 
-  uint8_t nonDiscoverable = 0;
-
   // accelerometer and timer inits
   leds_init();
   timer_init(TIM2);
@@ -202,19 +238,18 @@ int main(void)
 
     if (check_lost == 1) {  // Each tick is 50ms
       // before handling lost mode, set lastBleMsgTime to current time
-      lastBleMsgTime = HAL_GetTick();
       handle_lost_mode_leds();
       check_lost = 0;
     }
-
-	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-	    catchBLE();
-	  }else{
-		  HAL_Delay(1000);
-		  // Send a string to the NORDIC UART service, remember to not include the newline
-		  unsigned char test_str[] = "youlostit BLE test";
-		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-	  }
+//
+//	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+//	    catchBLE();
+//	  }else{
+//		  HAL_Delay(1000);
+//		  // Send a string to the NORDIC UART service, remember to not include the newline
+//		  unsigned char test_str[] = "youlostit BLE test";
+//		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
+//	  }
 	  // Wait for interrupt, only uncomment if low power is needed
 	  //__WFI();
   }
