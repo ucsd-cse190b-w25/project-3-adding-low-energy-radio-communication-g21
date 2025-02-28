@@ -98,44 +98,75 @@ void detectLost()
   prev_z = z;
 }
 
-void handle_lost_mode_leds()
-{
-  if (still)
-  {
-    // if it is still increment number of ticks it has been still
-    still_count++;
-    // if no movement for 1 minute enter lost mode
-    // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
-    if (still_count >= 50) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
-    {
-      setDiscoverability(1);
-      nonDiscoverable = 0;
-      // if 10 seconds has passed, send message indicating how long it has been lost for.
-      if (HAL_GetTick() - lastBleMsgTime >= 10000)
-      {
-        leds_set(0b10);
-        HAL_Delay(1000);
-        lastBleMsgTime = HAL_GetTick();
+// void handle_lost_mode_leds()
+// {
+//   if (still)
+//   {
+//     // if it is still increment number of ticks it has been still
+//     still_count++;
+//     // if no movement for 1 minute enter lost mode
+//     // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
+//     if (still_count >= 50) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
+//     {
+//       setDiscoverability(1);
+//       nonDiscoverable = 0;
+//       // if 10 seconds has passed, send message indicating how long it has been lost for.
+//       if (HAL_GetTick() - lastBleMsgTime >= 10000)
+//       {
+//         leds_set(0b10);
+//         HAL_Delay(1000);
+//         lastBleMsgTime = HAL_GetTick();
 
-        uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
-        char msg[20]; // char buffer for the output string
-        sprintf(msg, "Missing for %lu secs", lostSeconds); // populate string with lost seconds
-        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
-      }
+//         uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+//         char msg[20]; // char buffer for the output string
+//         sprintf(msg, "Missing for %lu secs", lostSeconds); // populate string with lost seconds
+//         updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
+//       }
 
-      lost_count++;                           // increment lost count
-      lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
+//       lost_count++;                           // increment lost count
+//       lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
+//     }
+//     // then means movement within 1 minute
+//     else
+//     {
+//       leds_set(0); // keep leds off if less than 1 min
+//       // TODO: need to disconnect any clients and put the device into a non-discoverable mode since moving
+//       disconnectBLE();
+//       setDiscoverability(0);
+//       nonDiscoverable = 1;
+//     }
+//   }
+// }
+
+void handle_lost_mode_leds() {
+    if (still) {
+
+        still_count++;
+        if (still_count >= 400) { 
+        	leds_set(0b11);
+        	char msg[30];
+        	sprintf(msg, "LOST!", TAGNAME);
+            if (nonDiscoverable) {
+                setDiscoverability(1);
+                nonDiscoverable = 0;
+            }
+
+            if (HAL_GetTick() - lastBleMsgTime >= 1000) { // Every 10 seconds
+                lastBleMsgTime = HAL_GetTick();
+                uint32_t lostSeconds = (still_count * 50) / 1000;
+                char msg[30];
+                sprintf(msg, "PrivTag %s missing %lu s", TAGNAME, lostSeconds);
+                updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
+            }
+        }
+    } else {
+        if (!nonDiscoverable) {
+            disconnectBLE();
+            setDiscoverability(0);
+            nonDiscoverable = 1;
+            still = 0;
+        }
     }
-    // then means movement within 1 minute
-    else
-    {
-      leds_set(0); // keep leds off if less than 1 min
-      // TODO: need to disconnect any clients and put the device into a non-discoverable mode since moving
-      disconnectBLE();
-      setDiscoverability(0);
-      nonDiscoverable = 1;
-    }
-  }
 }
 
 void TIM2_IRQHandler(void)
@@ -208,19 +239,28 @@ int main(void)
 
   while (1)
   {
-    if (!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin))
-    {
-      leds_set(0b11);
-      catchBLE();
-    }
-    detectLost();
+    // if (!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin))
+    // {
+    //   leds_set(0b11);
+    //   catchBLE();
+    // }
+    // detectLost();
 
-    if (check_lost == 1)
-    { // Each tick is 50ms
-      // before handling lost mode, set lastBleMsgTime to current time
-      handle_lost_mode_leds();
-      check_lost = 0;
-    }
+    // if (check_lost == 1)
+    // { // Each tick is 50ms
+    //   // before handling lost mode, set lastBleMsgTime to current time
+    //   handle_lost_mode_leds();
+    //   check_lost = 0;
+    // }
+
+    detectLost();
+	  handle_lost_mode_leds();
+
+	  if (!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin)) {
+		  catchBLE();
+	  }
+
+    
     //
     //	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
     //	    catchBLE();
