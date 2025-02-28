@@ -132,7 +132,7 @@ void handle_lost_mode_leds()
       leds_set(0); // keep leds off if less than 1 min
       // TODO: need to disconnect any clients and put the device into a non-discoverable mode since moving
       disconnectBLE();
-      setDiscoverability(NON_DISCOVERABLE_MODE);
+      setDiscoverability(0);
       nonDiscoverable = 1;
     }
   }
