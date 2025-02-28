@@ -1,28 +1,27 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
+ * All rights reserved.</center></h2>
+ *
+ * This software component is licensed by ST under BSD 3-Clause license,
+ * the "License"; You may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at:
+ *                        opensource.org/licenses/BSD-3-Clause
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-//#include "ble_commands.h"
+// #include "ble_commands.h"
 #include "ble.h"
 
 #include <stdlib.h>
-
 
 #include <stdint.h>
 #include <stdio.h>
@@ -38,7 +37,7 @@
 #include "i2c.h"
 #include "lsm6dsl.h"
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
-  #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
+#warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
 #endif
 
 // 10011001
@@ -52,14 +51,13 @@ volatile uint8_t led_pair = 0;
 volatile uint8_t lost_minutes = 0;
 volatile uint8_t update_leds = 0;
 volatile uint32_t still_count = 0; // count number of timer interrupts called to calculate time
-volatile uint32_t lost_count = 0; // count number of 'lost' ticks to calculate lost minutes
+volatile uint32_t lost_count = 0;  // count number of 'lost' ticks to calculate lost minutes
 volatile int16_t prev_x = 0, prev_y = 0, prev_z = 0;
 volatile uint8_t still = 0;
 volatile uint32_t sys_tick = 0;
 volatile uint8_t check_lost = 0;
 volatile uint32_t lastBleMsgTime = 0;
 volatile uint8_t nonDiscoverable = 0;
-
 
 int dataAvailable = 0;
 
@@ -69,26 +67,30 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
 
-void detectLost() {
+void detectLost()
+{
   int16_t x, y, z;
   lsm6dsl_read_xyz(&x, &y, &z);
-  x = (int16_t) (x * SCALE);
-  y = (int16_t) (y * SCALE);
-  z = (int16_t) (z * SCALE);
+  x = (int16_t)(x * SCALE);
+  y = (int16_t)(y * SCALE);
+  z = (int16_t)(z * SCALE);
 
   printf("X: %d, Y: %d, Z: %d\n", x, y, z);
 
   if ((abs(x - prev_x) < 1500) &&
-  (abs(y - prev_y) < 1500) &&
-  (abs(z - prev_z) < 1500)) {
-      still = 1;
-  } else {
-      still = 0;
-      still_count = 0;   // reset still counter moving now
-      lost_count = 0;
-      lost_minutes = 0;
-      student_id_bit_index = 0;
-      leds_set(0);       // turn off LEDs immediately
+      (abs(y - prev_y) < 1500) &&
+      (abs(z - prev_z) < 1500))
+  {
+    still = 1;
+  }
+  else
+  {
+    still = 0;
+    still_count = 0; // reset still counter moving now
+    lost_count = 0;
+    lost_minutes = 0;
+    student_id_bit_index = 0;
+    leds_set(0); // turn off LEDs immediately
   }
 
   prev_x = x;
@@ -96,86 +98,70 @@ void detectLost() {
   prev_z = z;
 }
 
-void handle_lost_mode_leds() {
-  if (still) {
-       // if it is still increment number of ticks it has been still
-      still_count++;
-      // if no movement for 1 minute enter lost mode
-      if (still_count >= 50) { // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks
-//           handle lost mode logic by flashing leds with minutes since lost
-//
-//           instead of handling LEDS, handle BLE message instead
-//           uint32_t full_data = (PREAMBLE_STUDENT_ID << 8) | lost_minutes;
-//
-//           led_pair = (full_data >> (30 - student_id_bit_index)) & 0b11;
-//           student_id_bit_index += 2;
-//           if (student_id_bit_index >= 32) {
-//               student_id_bit_index = 0;
-//           }
-//           leds_set(led_pair);
-//          if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-//            catchBLE();
-//            leds_set(0b11);
-//          }
-//
-//          // every 10 seconds, send lost message BLE
-//          if (HAL_GetTick() - lastBleMsgTime >= 10000) {
-//        	leds_set(0b10);
-//            lastBleMsgTime = HAL_GetTick();
-//
-//            uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
-//            char msg[80];
-//            sprintf(msg, "PrivTag %s has been missing for %lu seconds", TAGNAME, lostSeconds);
-//
-//            updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), (unsigned char*)msg);
-//          }
-    	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-    		leds_set(0b11);
-    	    catchBLE();
-    	  }
-    	  if (HAL_GetTick() - lastBleMsgTime >= 10000) {
-    		  leds_set(0b10);
-    		  HAL_Delay(1000);
-    		  lastBleMsgTime = HAL_GetTick();
-    		  // Send a string to the NORDIC UART service, remember to not include the newline
-    		  int offset = 0;
+void handle_lost_mode_leds()
+{
+  if (still)
+  {
+    // if it is still increment number of ticks it has been still
+    still_count++;
+    // if no movement for 1 minute enter lost mode
+    // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
+    if (still_count >= 50) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
+    {
+      setDiscoverability(1);
+      nonDiscoverable = 0;
+      // if 10 seconds has passed, send message indicating how long it has been lost for.
+      if (HAL_GetTick() - lastBleMsgTime >= 10000)
+      {
+        leds_set(0b10);
+        HAL_Delay(1000);
+        lastBleMsgTime = HAL_GetTick();
 
-    		  uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
-    		  char msg[20];
-    		  sprintf(msg, "Missing for %lu secs", lostSeconds);
-    		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
-    	  }
+        uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+        char msg[20]; // char buffer for the output string
+        sprintf(msg, "Missing for %lu secs", lostSeconds); // populate string with lost seconds
+        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
+      }
 
-          lost_count++; // increment lost count 
-          lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
-      }
-      // then means movement within 1 minute
-      else {
-          leds_set(0); // keep leds off if less than 1 min
-      }
+      lost_count++;                           // increment lost count
+      lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
+    }
+    // then means movement within 1 minute
+    else
+    {
+      leds_set(0); // keep leds off if less than 1 min
+      // TODO: need to disconnect any clients and put the device into a non-discoverable mode since moving
+      disconnectBLE();
+      setDiscoverability(NON_DISCOVERABLE_MODE);
+      nonDiscoverable = 1;
+    }
   }
 }
 
-void TIM2_IRQHandler(void) {
-  if (TIM2->SR & TIM_SR_UIF) {
-      TIM2->SR &= ~TIM_SR_UIF;
+void TIM2_IRQHandler(void)
+{
+  if (TIM2->SR & TIM_SR_UIF)
+  {
+    TIM2->SR &= ~TIM_SR_UIF;
 
-      check_lost = 1;
+    check_lost = 1;
   }
 }
 
-int _write(int file, char *ptr, int len) {
+int _write(int file, char *ptr, int len)
+{
   int i = 0;
-  for (i = 0; i < len; i++) {
-      ITM_SendChar(*ptr++);
+  for (i = 0; i < len; i++)
+  {
+    ITM_SendChar(*ptr++);
   }
   return len;
 }
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -188,12 +174,16 @@ int main(void)
   MX_GPIO_Init();
   MX_SPI3_Init();
 
-  //RESET BLE MODULE
-  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port,BLE_RESET_Pin,GPIO_PIN_RESET);
+  // RESET BLE MODULE
+  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_RESET);
   HAL_Delay(10);
-  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port,BLE_RESET_Pin,GPIO_PIN_SET);
+  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_SET);
 
   ble_init();
+  // ensure that ble is disconnected and it is not discoverable
+  disconnectBLE();
+  setDiscoverability(nonDiscoverable);
+  nonDiscoverable = 1;
 
   HAL_Delay(10);
 
@@ -218,47 +208,53 @@ int main(void)
 
   while (1)
   {
+    if (!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin))
+    {
+      leds_set(0b11);
+      catchBLE();
+    }
     detectLost();
 
-    if (check_lost == 1) {  // Each tick is 50ms
+    if (check_lost == 1)
+    { // Each tick is 50ms
       // before handling lost mode, set lastBleMsgTime to current time
       handle_lost_mode_leds();
       check_lost = 0;
     }
-//
-//	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-//	    catchBLE();
-//	  }else{
-//		  HAL_Delay(1000);
-//		  // Send a string to the NORDIC UART service, remember to not include the newline
-//		  unsigned char test_str[] = "youlostit BLE test";
-//		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-//	  }
-	  // Wait for interrupt, only uncomment if low power is needed
-	  //__WFI();
+    //
+    //	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+    //	    catchBLE();
+    //	  }else{
+    //		  HAL_Delay(1000);
+    //		  // Send a string to the NORDIC UART service, remember to not include the newline
+    //		  unsigned char test_str[] = "youlostit BLE test";
+    //		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
+    //	  }
+    // Wait for interrupt, only uncomment if low power is needed
+    //__WFI();
   }
 }
 
 /**
-  * @brief System Clock Configuration
-  * @attention This changes the System clock frequency, make sure you reflect that change in your timer
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @attention This changes the System clock frequency, make sure you reflect that change in your timer
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
   {
     Error_Handler();
   }
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
@@ -271,9 +267,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
@@ -286,10 +281,10 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief SPI3 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief SPI3 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_SPI3_Init(void)
 {
 
@@ -322,19 +317,18 @@ static void MX_SPI3_Init(void)
   /* USER CODE BEGIN SPI3_Init 2 */
 
   /* USER CODE END SPI3_Init 2 */
-
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -349,7 +343,6 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(BLE_CS_GPIO_Port, BLE_CS_Pin, GPIO_PIN_SET);
 
-
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_SET);
 
@@ -360,7 +353,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(BLE_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : GPIO_LED1_Pin BLE_RESET_Pin */
-  GPIO_InitStruct.Pin = GPIO_LED1_Pin|BLE_RESET_Pin;
+  GPIO_InitStruct.Pin = GPIO_LED1_Pin | BLE_RESET_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -377,8 +370,8 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -386,9 +379,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -400,14 +393,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
