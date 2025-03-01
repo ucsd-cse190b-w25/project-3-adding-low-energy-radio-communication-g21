@@ -4,10 +4,10 @@
 ../Core/Src/ble.c:172:5:checkEventResp	3
 ../Core/Src/ble.c:185:6:sendCommand	3
 ../Core/Src/ble.c:211:6:catchBLE	4
-../Core/Src/ble.c:231:6:setConnectable	4
-../Core/Src/ble.c:285:5:BLE_command	4
-../Core/Src/ble.c:310:6:addService	2
-../Core/Src/ble.c:323:6:addCharacteristic	2
-../Core/Src/ble.c:337:6:updateCharValue	1
-../Core/Src/ble.c:360:6:disconnectBLE	6
-../Core/Src/ble.c:388:6:setDiscoverability	3
+../Core/Src/ble.c:231:6:setConnectable	3
+../Core/Src/ble.c:287:5:BLE_command	4
+../Core/Src/ble.c:312:6:addService	2
+../Core/Src/ble.c:325:6:addCharacteristic	2
+../Core/Src/ble.c:339:6:updateCharValue	1
+../Core/Src/ble.c:362:6:disconnectBLE	6
+../Core/Src/ble.c:390:6:setDiscoverability	3

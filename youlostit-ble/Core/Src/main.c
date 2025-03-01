@@ -43,21 +43,19 @@
 // 10011001
 #define PREAMBLE_STUDENT_ID 0b100110010001000010001000
 #define SCALE 0.488
-#define TAGNAME "PrivTag"
+#define TAGNAME "Tracker"
 #define BLE_MAX_PAYLOAD 20
 volatile uint8_t student_id_bit_index = 0;
 volatile uint8_t led_pair = 0;
 
-volatile uint8_t lost_minutes = 0;
 volatile uint8_t update_leds = 0;
 volatile uint32_t still_count = 0; // count number of timer interrupts called to calculate time
-volatile uint32_t lost_count = 0;  // count number of 'lost' ticks to calculate lost minutes
 volatile int16_t prev_x = 0, prev_y = 0, prev_z = 0;
 volatile uint8_t still = 0;
-volatile uint32_t sys_tick = 0;
-volatile uint8_t check_lost = 0;
 volatile uint32_t lastBleMsgTime = 0;
 volatile uint8_t nonDiscoverable = 0;
+volatile uint8_t check_lost = 0;
+uint32_t prevTime = 0;
 
 int dataAvailable = 0;
 
@@ -82,15 +80,18 @@ void detectLost()
       (abs(z - prev_z) < 1500))
   {
     still = 1;
+    leds_set(0b01);
   }
   else
   {
     still = 0;
     still_count = 0; // reset still counter moving now
-    lost_count = 0;
-    lost_minutes = 0;
+    lastBleMsgTime = 0;
     student_id_bit_index = 0;
     leds_set(0); // turn off LEDs immediately
+    disconnectBLE();
+    setDiscoverability(0);
+    nonDiscoverable = 1;
   }
 
   prev_x = x;
@@ -103,34 +104,32 @@ void handle_lost_mode_leds()
   if (still)
   {
     // if it is still increment number of ticks it has been still
-    still_count++;
+
     // if no movement for 1 minute enter lost mode
     // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
-    if (still_count >= 50) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
+    if (still_count >= 1200) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
     {
-      setDiscoverability(1);
-      nonDiscoverable = 0;
-      // if 10 seconds has passed, send message indicating how long it has been lost for.
-      if (HAL_GetTick() - lastBleMsgTime >= 10000)
+      if (nonDiscoverable == 1) {
+    	  setDiscoverability(nonDiscoverable);
+    	  nonDiscoverable = 0;
+      }
+      leds_set(0b11);
+      if (((still_count * 50) / 1000 - lastBleMsgTime) >= 10)
       {
         leds_set(0b10);
-        HAL_Delay(1000);
-        lastBleMsgTime = HAL_GetTick();
+//        HAL_Delay(1000);
+        lastBleMsgTime = (still_count * 50) / 1000;
 
-        uint32_t lostSeconds = (still_count * 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+        uint32_t lostSeconds = ((still_count - 1200)* 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
         char msg[20]; // char buffer for the output string
-        sprintf(msg, "Missing for %lu secs", lostSeconds); // populate string with lost seconds
+        sprintf(msg, "%s: %lu secs", TAGNAME, lostSeconds); // populate string with lost seconds
         updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
       }
-
-      lost_count++;                           // increment lost count
-      lost_minutes = lost_count * 50 / 60000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 60000 ms to get minutes
     }
     // then means movement within 1 minute
     else
     {
       leds_set(0); // keep leds off if less than 1 min
-      // TODO: need to disconnect any clients and put the device into a non-discoverable mode since moving
       disconnectBLE();
       setDiscoverability(0);
       nonDiscoverable = 1;
@@ -145,6 +144,9 @@ void TIM2_IRQHandler(void)
     TIM2->SR &= ~TIM_SR_UIF;
 
     check_lost = 1;
+    if (still) {
+    	still_count++;
+    }
   }
 }
 
@@ -210,26 +212,16 @@ int main(void)
   {
     if (!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin))
     {
-      leds_set(0b11);
       catchBLE();
     }
+    
     detectLost();
-
     if (check_lost == 1)
     { // Each tick is 50ms
       // before handling lost mode, set lastBleMsgTime to current time
       handle_lost_mode_leds();
       check_lost = 0;
     }
-    //
-    //	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-    //	    catchBLE();
-    //	  }else{
-    //		  HAL_Delay(1000);
-    //		  // Send a string to the NORDIC UART service, remember to not include the newline
-    //		  unsigned char test_str[] = "youlostit BLE test";
-    //		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-    //	  }
     // Wait for interrupt, only uncomment if low power is needed
     //__WFI();
   }

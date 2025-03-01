@@ -15,7 +15,7 @@ extern SPI_HandleTypeDef hspi3;
 extern int dataAvailable;
 
 // Device name sent in BLE advertisement packets
-uint8_t deviceName[]={'P','r','i','v','T','a','g'};
+uint8_t deviceName[]={'T', 'r', 'a', 'c', 'k', 'e', 'r'};
 
 uint8_t buffer[255];
 
@@ -229,43 +229,45 @@ void catchBLE(uint8_t * byte1, uint8_t * byte2){
 }
 
 void setConnectable(){
-	   uint8_t* rxEvent;
-	   //Start advertising
-	   uint8_t *localname;
-	   int res;
-	   localname=(uint8_t*)malloc(sizeof(deviceName)+5);//carattere di terminazione+listauid+slavetemp
-	   memcpy(localname,deviceName,sizeof(deviceName));
-	   localname[sizeof(deviceName)+1]=0x00;
-	   localname[sizeof(deviceName)+2]=0x00;
-	   localname[sizeof(deviceName)+3]=0x00;
-	   localname[sizeof(deviceName)+4]=0x00;
-	   localname[sizeof(deviceName)]=0x00;
+		uint8_t* rxEvent;
+		//Start advertising
+		uint8_t *localname;
+		int res;
+		localname=(uint8_t*)malloc(sizeof(deviceName)+5);//carattere di terminazione+listauid+slavetemp
+		memcpy(localname,deviceName,sizeof(deviceName));
+		localname[sizeof(deviceName)+1]=0x00;
+		localname[sizeof(deviceName)+2]=0x00;
+		localname[sizeof(deviceName)+3]=0x00;
+		localname[sizeof(deviceName)+4]=0x00;
+		localname[sizeof(deviceName)]=0x00;
 
 
-	   ACI_GAP_SET_DISCOVERABLE[11]=sizeof(deviceName)+1;
-	   ACI_GAP_SET_DISCOVERABLE[3]=sizeof(deviceName)+5+sizeof(ACI_GAP_SET_DISCOVERABLE)-4;
+		ACI_GAP_SET_DISCOVERABLE[11]=sizeof(deviceName)+1;
+		ACI_GAP_SET_DISCOVERABLE[3]=sizeof(deviceName)+5+sizeof(ACI_GAP_SET_DISCOVERABLE)-4;
 
-	   uint8_t *discoverableCommand;
-	   discoverableCommand=(uint8_t*)malloc(sizeof(ACI_GAP_SET_DISCOVERABLE)+sizeof(deviceName)+5);
-	   memcpy(discoverableCommand,ACI_GAP_SET_DISCOVERABLE,sizeof(ACI_GAP_SET_DISCOVERABLE));
-	   memcpy(discoverableCommand+sizeof(ACI_GAP_SET_DISCOVERABLE),localname,sizeof(deviceName)+5);
+		uint8_t *discoverableCommand;
+		discoverableCommand=(uint8_t*)malloc(sizeof(ACI_GAP_SET_DISCOVERABLE)+sizeof(deviceName)+5);
+		memcpy(discoverableCommand,ACI_GAP_SET_DISCOVERABLE,sizeof(ACI_GAP_SET_DISCOVERABLE));
+		memcpy(discoverableCommand+sizeof(ACI_GAP_SET_DISCOVERABLE),localname,sizeof(deviceName)+5);
 
-	   sendCommand(discoverableCommand,sizeof(deviceName)+5+sizeof(ACI_GAP_SET_DISCOVERABLE));
-	   rxEvent=(uint8_t*)malloc(7);
-	   while(!dataAvailable);
-	   res=fetchBleEvent(rxEvent,7);
-	   if(res==BLE_OK){
-	   res=checkEventResp(rxEvent,ACI_GAP_SET_DISCOVERABLE_COMPLETE,7);
-	   if(res==BLE_OK){
-		   stackInitCompleteFlag|=0x80;
-	   }
-	   }
+		// remove existing buffer content
+		rxEvent=(uint8_t*)malloc(7);
+		res=fetchBleEvent(rxEvent,7);
 
-	   free(rxEvent);
-	   free(discoverableCommand);
-	   free(localname);
-	   HAL_Delay(10);
-}
+		// send the command to make the peripheral discoverable
+		sendCommand(discoverableCommand,sizeof(deviceName)+5+sizeof(ACI_GAP_SET_DISCOVERABLE));
+		HAL_Delay(100);
+		res=fetchBleEvent(rxEvent,7);
+		if(res==BLE_OK){
+		   if(checkEventResp(rxEvent, ACI_GAP_SET_DISCOVERABLE_COMPLETE, 7)==BLE_OK){
+			  stackInitCompleteFlag|=0x80;
+		   }
+		}
+		free(rxEvent);
+		free(discoverableCommand);
+		free(localname);
+		HAL_Delay(10);
+ }
 
 /**
  * @brief Sends a BLE command and processes the response event.

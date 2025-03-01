@@ -46,7 +46,7 @@ void timer_set_ms(TIM_TypeDef* timer, uint16_t period_ms)
 {
   timer->CR1 &= ~TIM_CR1_CEN;
   // Calculate clock frequency and prescaler
-  int clock_freq = 4000000; // Default clock frequency 4 MHz
+  int clock_freq = 8000000; // Default clock frequency 4 MHz
   int prescaler = (clock_freq / 1000) - 1; // Scale to milliseconds
   // now is 4000 tick per sec
 
