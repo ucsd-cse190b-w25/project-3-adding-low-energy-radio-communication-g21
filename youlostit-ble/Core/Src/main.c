@@ -80,7 +80,6 @@ void detectLost()
       (abs(z - prev_z) < 1500))
   {
     still = 1;
-    leds_set(0b01);
   }
   else
   {
@@ -88,7 +87,6 @@ void detectLost()
     still_count = 0; // reset still counter moving now
     lastBleMsgTime = 0;
     student_id_bit_index = 0;
-    leds_set(0); // turn off LEDs immediately
     disconnectBLE();
     setDiscoverability(0);
     nonDiscoverable = 1;
@@ -106,18 +104,15 @@ void handle_lost_mode_leds()
     // if it is still increment number of ticks it has been still
 
     // if no movement for 1 minute enter lost mode
-    // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
     if (still_count >= 1200) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
     {
       if (nonDiscoverable == 1) {
     	  setDiscoverability(nonDiscoverable);
     	  nonDiscoverable = 0;
       }
-      leds_set(0b11);
+      
       if (((still_count * 50) / 1000 - lastBleMsgTime) >= 10)
       {
-        leds_set(0b10);
-//        HAL_Delay(1000);
         lastBleMsgTime = (still_count * 50) / 1000;
 
         uint32_t lostSeconds = ((still_count - 1200)* 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
@@ -129,7 +124,7 @@ void handle_lost_mode_leds()
     // then means movement within 1 minute
     else
     {
-      leds_set(0); // keep leds off if less than 1 min
+      // not considered lost if less than 1 min
       disconnectBLE();
       setDiscoverability(0);
       nonDiscoverable = 1;
