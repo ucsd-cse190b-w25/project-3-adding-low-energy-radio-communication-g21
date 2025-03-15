@@ -64,6 +64,7 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
+void SetSystemClock(uint8_t speed);
 
 void detectLost()
 {
@@ -75,12 +76,11 @@ void detectLost()
 
   printf("X: %d, Y: %d, Z: %d\n", x, y, z);
 
-  if ((abs(x - prev_x) < 1500) &&
-      (abs(y - prev_y) < 1500) &&
-      (abs(z - prev_z) < 1500))
+  if ((abs(x - prev_x) < 2000) &&
+      (abs(y - prev_y) < 2000) &&
+      (abs(z - prev_z) < 2000))
   {
     still = 1;
-    leds_set(0b01);
   }
   else
   {
@@ -88,10 +88,11 @@ void detectLost()
     still_count = 0; // reset still counter moving now
     lastBleMsgTime = 0;
     student_id_bit_index = 0;
-    leds_set(0); // turn off LEDs immediately
     disconnectBLE();
     setDiscoverability(0);
     nonDiscoverable = 1;
+	SetSystemClock(2);
+	timer_set_ms(TIM2, 500);
   }
 
   prev_x = x;
@@ -106,21 +107,19 @@ void handle_lost_mode_leds()
     // if it is still increment number of ticks it has been still
 
     // if no movement for 1 minute enter lost mode
-    // TODO: wake up the BLE device and beacon for clients to connect when it is stationary for one minute?
-    if (still_count >= 1200) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
+    if (still_count >= 20) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
     {
+      SetSystemClock(8);
+      timer_set_ms(TIM2, 500);
       if (nonDiscoverable == 1) {
     	  setDiscoverability(nonDiscoverable);
     	  nonDiscoverable = 0;
       }
-      leds_set(0b11);
-      if (((still_count * 50) / 1000 - lastBleMsgTime) >= 10)
+      if (((still_count * 500) / 1000 - lastBleMsgTime) >= 10)
       {
-        leds_set(0b10);
-//        HAL_Delay(1000);
-        lastBleMsgTime = (still_count * 50) / 1000;
+        lastBleMsgTime = (still_count * 500) / 1000;
 
-        uint32_t lostSeconds = ((still_count - 1200)* 50) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+        uint32_t lostSeconds = ((still_count - 20)* 500) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
         char msg[20]; // char buffer for the output string
         sprintf(msg, "%s: %lu secs", TAGNAME, lostSeconds); // populate string with lost seconds
         updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
@@ -129,10 +128,12 @@ void handle_lost_mode_leds()
     // then means movement within 1 minute
     else
     {
-      leds_set(0); // keep leds off if less than 1 min
+//      leds_set(0b00);
       disconnectBLE();
       setDiscoverability(0);
       nonDiscoverable = 1;
+      SetSystemClock(2);
+      timer_set_ms(TIM2, 500);
     }
   }
 }
@@ -190,11 +191,10 @@ int main(void)
   HAL_Delay(10);
 
   // accelerometer and timer inits
-  leds_init();
   timer_init(TIM2);
   i2c_init();
   lsm6dsl_init();
-  timer_set_ms(TIM2, 50);
+  timer_set_ms(TIM2, 500);
   timer_reset(TIM2);
 
   int16_t x, y, z;
@@ -222,8 +222,26 @@ int main(void)
       handle_lost_mode_leds();
       check_lost = 0;
     }
+
+//    leds_set(0b10);
+//    __HAL_RCC_PWR_CLK_ENABLE();
+//
+//    PWR->CR1 &= ~PWR_CR1_LPMS;
+//    PWR->CR1 |= PWR_CR1_LPMS_STOP1;
+//    __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+//    HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
+    PWR->CR1 |= PWR_CR1_LPR;
     // Wait for interrupt, only uncomment if low power is needed
-    //__WFI();
+//    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+    HAL_SuspendTick();
+//    HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+    __WFI();
+    HAL_ResumeTick();
+//    SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+//    leds_set(0b01);
+
+    // optionally reconfigure clocks
+    SystemClock_Config();
   }
 }
 
@@ -251,7 +269,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
   // This lines changes system clock frequency
-  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_7;
+  RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_7; // 1Mhz
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -383,6 +401,51 @@ void Error_Handler(void)
   {
   }
   /* USER CODE END Error_Handler_Debug */
+}
+
+void SetSystemClock(uint8_t speed)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+   */
+  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+   /** Initializes the RCC Oscillators according to the specified parameters
+ * in the RCC_OscInitTypeDef structure.
+ */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = 0;
+
+  if (speed == 8) {
+    RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_7; // 8 MHz
+  } else {
+    RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_2; // 2 MHz
+  }
+
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+	Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+	Error_Handler();
+  }
 }
 
 #ifdef USE_FULL_ASSERT
