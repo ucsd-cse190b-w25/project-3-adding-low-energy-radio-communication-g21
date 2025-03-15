@@ -107,7 +107,7 @@ void handle_lost_mode_leds()
     // if it is still increment number of ticks it has been still
 
     // if no movement for 1 minute enter lost mode
-    if (still_count >= 20) // 1 tick = 50 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
+    if (still_count >= 120) // 1 tick = 500 ms and 60000 ms = 1m so 60000/50 = 1200 ticks (50 ticks for testing purposes)
     {
       SetSystemClock(8);
       timer_set_ms(TIM2, 500);
@@ -119,7 +119,7 @@ void handle_lost_mode_leds()
       {
         lastBleMsgTime = (still_count * 500) / 1000;
 
-        uint32_t lostSeconds = ((still_count - 20)* 500) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
+        uint32_t lostSeconds = ((still_count - 120)* 500) / 1000; // each count is 50 ms so ticks * 50 ms to get ms -> divide by 1000 ms to get seconds
         char msg[20]; // char buffer for the output string
         sprintf(msg, "%s: %lu secs", TAGNAME, lostSeconds); // populate string with lost seconds
         updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(msg), msg);
@@ -128,7 +128,7 @@ void handle_lost_mode_leds()
     // then means movement within 1 minute
     else
     {
-//      leds_set(0b00);
+      // not considered lost if less than 1 min
       disconnectBLE();
       setDiscoverability(0);
       nonDiscoverable = 1;
@@ -425,7 +425,7 @@ void SetSystemClock(uint8_t speed)
   if (speed == 8) {
     RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_7; // 8 MHz
   } else {
-    RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_2; // 2 MHz
+    RCC_OscInitStruct.MSIClockRange = RCC_CR_MSIRANGE_2; // 131 KHz
   }
 
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;

@@ -1,4 +1,5 @@
 ../Drivers/CMSIS/Include/core_cm4.h:2059:26:ITM_SendChar	16	static,ignoring_inline_asm
+<<<<<<< HEAD
 ../Core/Src/main.c:69:6:detectLost	16	static
 ../Core/Src/main.c:103:6:handle_lost_mode_leds	40	static
 ../Core/Src/main.c:141:6:TIM2_IRQHandler	4	static
@@ -9,3 +10,14 @@
 ../Core/Src/main.c:337:13:MX_GPIO_Init	48	static
 ../Core/Src/main.c:395:6:Error_Handler	4	static,ignoring_inline_asm
 ../Core/Src/main.c:406:6:SetSystemClock	104	static
+=======
+../Core/Src/main.c:68:6:detectLost	16	static
+../Core/Src/main.c:100:6:handle_lost_mode_leds	40	static
+../Core/Src/main.c:135:6:TIM2_IRQHandler	4	static
+../Core/Src/main.c:148:5:_write	32	static
+../Core/Src/main.c:162:5:main	16	static
+../Core/Src/main.c:230:6:SystemClock_Config	96	static
+../Core/Src/main.c:275:13:MX_SPI3_Init	8	static
+../Core/Src/main.c:314:13:MX_GPIO_Init	48	static
+../Core/Src/main.c:372:6:Error_Handler	4	static,ignoring_inline_asm
+>>>>>>> 7169d73f6fb2535a78e8fc23e42cbcd17d2fe30b
