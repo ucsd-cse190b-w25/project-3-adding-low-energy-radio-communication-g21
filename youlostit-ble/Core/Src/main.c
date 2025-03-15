@@ -91,8 +91,8 @@ void detectLost()
     disconnectBLE();
     setDiscoverability(0);
     nonDiscoverable = 1;
-	SetSystemClock(2);
-	timer_set_ms(TIM2, 500);
+    SetSystemClock(2);
+    timer_set_ms(TIM2, 500);
   }
 
   prev_x = x;
